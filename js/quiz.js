@@ -1,5 +1,27 @@
 import { saveProgress } from './storage.js';
 
+// Helper function for flexible string matching (forgiving on typos, punctuation, capitalization)
+function isFlexibleMatch(userAnswer, correctAnswer) {
+  const clean = (str) => {
+    return String(str)
+      .toLowerCase()
+      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'’]/g, "") // Remove punctuation
+      .replace(/\s+/g, " ")                             // Replace multiple spaces with a single space
+      .trim();
+  };
+
+  const cleanedUser = clean(userAnswer);
+  const cleanedCorrect = clean(correctAnswer);
+
+  if (cleanedUser === cleanedCorrect) return true;
+
+  if (cleanedCorrect.length > 4 && cleanedUser.includes(cleanedCorrect)) {
+    return true;
+  }
+
+  return false;
+}
+
 export async function renderQuiz(container, subjectId, customQuestions = null) {
   try {
     let questions = customQuestions;
@@ -51,6 +73,20 @@ export async function renderQuiz(container, subjectId, customQuestions = null) {
             <button id="submitBtn">Submit Answer</button>
           </div>
         `;
+      } else if (q.type === 'modified-true-false') {
+        inputHtml = `
+          <div style="margin: 1.5rem 0;">
+            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+              <label style="cursor: pointer;"><input type="radio" name="mtf-choice" value="True" style="margin-right: 5px;"> True</label>
+              <label style="cursor: pointer;"><input type="radio" name="mtf-choice" value="False" style="margin-right: 5px;"> False</label>
+            </div>
+            <div id="correction-container" style="margin-bottom: 1rem;">
+              <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">If False, type the correction:</p>
+              <input type="text" id="mtfCorrection" placeholder="Enter correction..." class="card" style="width:100%; padding:0.8rem; font-size:1rem; border:1px solid var(--border-color); background:var(--bg-color); color:var(--text-main); border-radius:6px;">
+            </div>
+            <button id="submitBtn">Submit Answer</button>
+          </div>
+        `;
       } else {
         inputHtml = `
           <div style="display: grid; gap: 0.5rem; margin-top: 1rem;">
@@ -78,19 +114,41 @@ export async function renderQuiz(container, subjectId, customQuestions = null) {
         let isCorrect = false;
 
         if (q.type === 'identification') {
-          const cleanedUser = String(userAnswer).trim().toLowerCase();
-          const cleanedCorrect = String(q.answer).trim().toLowerCase();
-          isCorrect = (cleanedUser === cleanedCorrect);
+          isCorrect = isFlexibleMatch(userAnswer, q.answer);
         } 
         else if (q.type === 'enumeration') {
           const userItems = String(userAnswer)
             .split(/[\n,;]+/)
-            .map(item => item.trim().toLowerCase())
+            .map(item => item.trim())
             .filter(item => item.length > 0);
 
-          const correctItems = q.answer.map(item => String(item).trim().toLowerCase());
-          isCorrect = correctItems.every(reqItem => userItems.includes(reqItem)) && userItems.length >= correctItems.length;
+          const correctItems = q.answer.map(item => String(item).trim());
+          isCorrect = correctItems.every(reqItem => 
+            userItems.some(userItem => isFlexibleMatch(userItem, reqItem))
+          ) && userItems.length >= correctItems.length;
         } 
+        else if (q.type === 'modified-true-false') {
+          const selectedRadio = document.querySelector('input[name="mtf-choice"]:checked');
+          if (!selectedRadio) {
+            alert('Please select True or False!');
+            return false;
+          }
+          const userChoice = selectedRadio.value; 
+          const userCorrection = document.getElementById('mtfCorrection').value;
+          
+          const expectedAnswer = String(q.answer); 
+          const expectedCorrection = String(q.correction || "");
+
+          if (userChoice === expectedAnswer) {
+            if (expectedAnswer === "True") {
+              isCorrect = true;
+            } else {
+              isCorrect = isFlexibleMatch(userCorrection, expectedCorrection);
+            }
+          } else {
+            isCorrect = false;
+          }
+        }
         else {
           isCorrect = (userAnswer === q.answer);
         }
@@ -101,6 +159,10 @@ export async function renderQuiz(container, subjectId, customQuestions = null) {
         if (q.type === 'identification' || q.type === 'enumeration') {
           document.getElementById('submitBtn').disabled = true;
           document.getElementById('ansInput').disabled = true;
+        } else if (q.type === 'modified-true-false') {
+          document.getElementById('submitBtn').disabled = true;
+          document.querySelectorAll('input[name="mtf-choice"]').forEach(r => r.disabled = true);
+          document.getElementById('mtfCorrection').disabled = true;
         } else {
           container.querySelectorAll('.opt-btn').forEach(btn => btn.disabled = true);
         }
@@ -115,9 +177,16 @@ export async function renderQuiz(container, subjectId, customQuestions = null) {
             <button id="nextBtn" style="background: #28a745; color: white;">Next Question →</button>
           `;
         } else {
-          let correctText = q.type === 'multiple-choice' || q.type === 'true-false' 
-            ? q.options[q.answer] 
-            : Array.isArray(q.answer) ? q.answer.join(', ') : q.answer;
+          let correctText = '';
+          if (q.type === 'multiple-choice' || q.type === 'true-false') {
+            correctText = q.options[q.answer];
+          } else if (q.type === 'modified-true-false') {
+            correctText = `${q.answer}${q.answer === 'False' ? ` (Correction: ${q.correction})` : ''}`;
+          } else if (Array.isArray(q.answer)) {
+            correctText = q.answer.join(', ');
+          } else {
+            correctText = q.answer;
+          }
 
           feedbackArea.innerHTML = `
             <div style="background-color: #f8d7da; color: #721c24; padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem;">
@@ -132,6 +201,8 @@ export async function renderQuiz(container, subjectId, customQuestions = null) {
           currentQ++;
           showQuestion();
         });
+
+        return true;
       };
 
       // Event Binding
@@ -151,6 +222,11 @@ export async function renderQuiz(container, subjectId, customQuestions = null) {
         submitBtn.addEventListener('click', handleSubmission);
         textInput.addEventListener('keypress', (e) => {
           if (e.key === 'Enter' && q.type === 'identification') handleSubmission();
+        });
+      } else if (q.type === 'modified-true-false') {
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.addEventListener('click', () => {
+          evaluateAndShowFeedback();
         });
       } else {
         container.querySelectorAll('.opt-btn').forEach(btn => {
