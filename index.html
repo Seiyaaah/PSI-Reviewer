@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiLearn - Interactive Learning App</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#4f46e5">
+    <link rel="icon" type="image/png" href="./icons/icon-192.png">
+    <link rel="apple-touch-icon" href="./icons/icon-192.png">
+</head>
+<body>
+<header class="navbar">
+    <div class="logo">🧠 VoiLearn</div>
+    <nav style="display: flex; align-items: center;">
+        <a href="#home" class="nav-link" data-route="home">Home</a>
+        <a href="#notes" class="nav-link" data-route="notes">Notes</a>
+        <a href="#progress" class="nav-link" data-route="progress">Progress</a>
+        <button id="themeToggleBtn" class="theme-toggle">🌙 Dark</button>
+    </nav>
+</header>
+
+    <main id="app-container" class="container">
+        <!-- Dynamic views render here -->
+        <section class="loading-view">Loading learning modules...</section>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2026 VoiLearn. Works offline.</p>
+    </footer>
+
+    <!-- Modular Scripts -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
+</body>
+</html>
